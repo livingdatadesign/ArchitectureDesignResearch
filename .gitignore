@@ -1,3 +1,14 @@
+# macOS
 ._*
 .DS_Store
 .trash/
+
+# R
+.RData
+.Rhistory
+.Rproj.user/
+renv/library/
+renv/staging/
+renv/sandbox/
+*_files/
+*_cache/

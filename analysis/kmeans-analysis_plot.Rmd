@@ -1,0 +1,247 @@
+---
+title: "DRSLiterature Review2"
+author: "Angela Rout"
+date: "2025-10-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# R Script for K-Means Topic Clustering on Academic Abstracts (Plotly Interactive Visualization)
+#install.packages("plotly")
+# install.packages("htmlwidgets")
+
+# 1. Setup and Package Installation
+# Load necessary libraries
+library(tm)        # Text Mining
+library(tidyverse) # Data manipulation (e.g., tibble, piping)
+library(cluster)   # Clustering algorithms
+library(factoextra) # Visualization of clustering results (for Elbow method)
+library(plotly)    # NEW: For interactive 3D visualization
+library(htmlwidgets)
+```
+
+```{r}
+# 2. Data Preparation (Simulation)
+my_data <- read_csv("../data/raw/drs_merged.csv")
+academic_abstracts<-my_data
+```
+```{r}
+# 3. Text Preprocessing using the 'tm' package
+corpus <- VCorpus(VectorSource(academic_abstracts$Abstract))
+
+clean_corpus <- function(corpus) {
+  corpus <- tm_map(corpus, content_transformer(tolower))
+  corpus <- tm_map(corpus, removePunctuation)
+  corpus <- tm_map(corpus, removeNumbers)
+  corpus <- tm_map(corpus, removeWords, stopwords("english"))
+  corpus <- tm_map(corpus, stripWhitespace)
+  
+  # Custom stop words
+  custom_stopwords <- c("analysis", "study", "research", "using", "model", 
+                        "review", "systems", "methods", "approach", "novel", "was", "will", "developed")
+  corpus <- tm_map(corpus, removeWords, custom_stopwords)
+  
+  return(corpus)
+}
+
+cleaned_corpus <- clean_corpus(corpus)
+```
+```{r}
+# 4. Create Document-Term Matrix (DTM) and Apply TF-IDF Weighting
+dtm <- DocumentTermMatrix(cleaned_corpus)
+dtm_reduced <- removeSparseTerms(dtm, sparse = 0.95)
+dtm_tfidf <- weightTfIdf(dtm_reduced)
+dtm_tfidf_matrix <- as.matrix(dtm_tfidf)
+
+# Scale the data for K-means (Crucial step for proper distance calculation)
+scaled_data <- scale(dtm_tfidf_matrix)
+
+```
+```{r}
+# 5. Determine Optimal Number of Clusters (K)
+print("--- Calculating Optimal K using Elbow Method ---")
+elbow_plot <- fviz_nbclust(
+    scaled_data, 
+    kmeans, 
+    method = "wss",
+    k.max = 20
+)
+
+print(elbow_plot) # Uncomment to view plot
+```
+
+```{r}
+K_optimal <-9
+print(paste0("Assuming K_optimal = ", K_optimal, " (Please check the generated elbow_plot visually in your R environment)"))
+```
+```{r}
+# 6. Run K-means Clustering
+kmeans_result <- kmeans(scaled_data, centers = K_optimal, nstart = 50, iter.max = 100)
+
+# Add cluster assignments back to the original dataframe
+academic_abstracts$Cluster <- kmeans_result$cluster
+academic_abstracts$ID<-1:nrow(academic_abstracts)
+
+print("\n--- Final Abstracts with Cluster Assignments ---")
+print(academic_abstracts %>% select(ID, Cluster, Abstract, Title))
+
+```
+```{r}
+# 7. Analyze and Interpret Clusters
+
+# B. Identify Key Terms for Each Cluster AND Generate Theme Labels
+cluster_centers <- as.data.frame(kmeans_result$centers)
+cluster_centers$Cluster <- 1:K_optimal
+cluster_themes <- list() # List to store the generated theme names
+
+```
+
+
+```{r}
+# Print the lookup table
+#print(theme_lookup)
+
+print(paste0("\n--- Top 5 Keywords per Cluster (K=", K_optimal, ") ---"))
+
+for (k in 1:K_optimal) {
+  # Select the center for the current cluster and convert the result to a numeric vector
+  center_vector <- cluster_centers %>% 
+    filter(Cluster == k) %>% 
+    select(-Cluster) %>%
+    unlist() 
+  
+  # Find the top 5 highest-weighted terms
+  top_terms <- sort(center_vector, decreasing = TRUE)[1:5]
+  
+  # Generate a theme label from the top 2 keywords
+  theme_name <- paste(names(top_terms)[1], names(top_terms)[2], sep = "/")
+  cluster_themes[[k]] <- theme_name
+  
+  cat(paste("\nCluster", k, "Theme:", theme_name, "\n"))
+  print(data.frame(Term = names(top_terms), TF_IDF_Score = as.numeric(top_terms)))
+}
+```
+
+```{r}
+# C. Look at the size of each cluster
+print("\n--- Cluster Sizes ---")
+print(table(academic_abstracts$Cluster))
+```
+```{r}
+# A. Visualize Clusters (Interactive Plotly with Custom Labels)
+
+print("\n--- Interactive Plotly Visualization ---")
+
+# 1. Perform PCA (Dimensionality Reduction) on Scaled Data
+pca_result <- prcomp(scaled_data, center = FALSE, scale. = FALSE)
+# Get the theme labels for mapping (must be in order 1, 2, 3...)
+theme_labels <- unlist(cluster_themes)
+```
+```{r}
+# 2. Extract coordinates for the data points (Abstracts)
+abstract_coords <- as.data.frame(pca_result$x[, 1:2]) %>%
+  rename(PC1 = 1, PC2 = 2) %>%
+  mutate(
+    Cluster = factor(academic_abstracts$Cluster, 
+                     levels = 1:K_optimal, 
+                     labels = theme_labels),
+    Abstract = academic_abstracts$Abstract,
+    Title = academic_abstracts$Title
+  )
+```
+```{r}
+# 3. Project cluster centers onto the PCA space
+# The centers are multiplied by the rotation matrix of the PCA result
+center_coords <- as.data.frame(kmeans_result$centers %*% pca_result$rotation[, 1:2]) %>%
+  rename(PC1 = 1, PC2 = 2) %>%
+  mutate(
+    Cluster = factor(1:K_optimal, 
+                     levels = theme_labels, 
+                     labels = theme_labels),
+    Theme = unlist(cluster_themes) # Use the generated themes
+  )
+```
+```{r}
+# 4. Create the Interactive Plotly Plot
+plotly_visualization <- plot_ly(
+  data = abstract_coords, 
+  x = ~PC1, 
+  y = ~PC2, 
+  color = ~Cluster, 
+  type = 'scatter', 
+  mode = 'markers',
+  hoverinfo = 'text',
+  text = ~paste(
+    '<b>Theme:</b> ', Cluster, 
+    '<br><b>Title:</b> ', Title
+  ),
+  marker = list(size = 10, opacity = 0.7)
+) %>%
+  # Add the Cluster Centers as text labels
+  add_trace(
+    data = center_coords,
+    x = ~PC1, 
+    y = ~PC2, 
+    type = 'scatter', 
+    mode = 'text+marker',
+    text = ~Theme, # Display the generated theme name
+    textfont = list(size = 14, color = 'black'),
+    textposition = 'middle right',
+    showlegend = FALSE, # Hide the centers from the legend
+    marker = list(size = 15, symbol = 'x', color = 'black') # Optional: Add an 'X' marker for the center
+  ) %>%
+  layout(
+    title = paste("K-Means Clustering: Abstracts Grouped by Theme (K=", K_optimal, ")"),
+    xaxis = list(title = "Principal Component 1"),
+    yaxis = list(title = "Principal Component 2")
+  )
+```
+```{r}
+# Print the interactive plot
+print(plotly_visualization)
+
+```
+
+```{r}
+# 8. Export Plotly Visualization to HTML
+print("\n--- Exporting Plotly as HTML File ---")
+
+# The saveWidget function from the htmlwidgets library saves the interactive plot
+# as a self-contained HTML file. The plot can be viewed in any web browser.
+html_output_path <- '../site/html/kmeans_topics.html'
+
+saveWidget(plotly_visualization, file = html_output_path, selfcontained = TRUE)
+
+print(paste0("Success! Plotly HTML file saved to: ", html_output_path))
+
+```
+
+```{r}
+academic_abstracts_clustername<-academic_abstracts %>% select("ID", "Cluster", "Abstract", "Title", "Downloads", "Publication Year" )
+
+cluster_themes1<-cluster_themes%>%as.data.frame()
+cluster_themes1<-cluster_themes1%>%pivot_longer(cols=everything())
+cluster_themes2<-cluster_themes1%>%select("value")%>%mutate(Cluster=as.factor(1:nrow(cluster_themes1)))
+academic_abstracts_clustername$Cluster <-as.factor(academic_abstracts_clustername$Cluster) 
+academic_abstracts_clustername<-academic_abstracts_clustername%>%left_join(cluster_themes2,academic_abstracts_clustername, by="Cluster")
+colnames(academic_abstracts_clustername)[7]<-"ClusterTheme"
+write.csv(academic_abstracts_clustername,"../data/processed/drs_merged_ClusterTheme.csv")
+```
+
+```{r}
+table<-academic_abstracts_clustername%>%
+  # 1. Group the data frame by the theme column
+  group_by(ClusterTheme) %>%
+  # 2. Summarise the resulting groups by counting the number of distinct titles
+  summarise(
+    Count_of_Unique_Titles = n_distinct(Title)
+    )%>%
+  # 3. Sort the resulting table in ascending order based on the count column
+  arrange(Count_of_Unique_Titles) %>%
+  # 3. Ungroup the data frame (good practice)
+  ungroup()
+```

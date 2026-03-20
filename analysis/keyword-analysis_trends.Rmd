@@ -1,0 +1,83 @@
+---
+title: "keywordAnalysisDRS"
+author: "Angela Rout"
+date: "2025-10-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r cars}
+
+```
+
+```{r}
+# R Script for Interactive Plotly Line Plot (Time Series)
+#install.packages(c("tidyverse","plotly","htmlwidgets"))
+# 1. Setup and Package Installation
+# Load necessary libraries
+library(tidyverse) # For data manipulation (e.g., tibble, pipes)
+library(plotly)    # For interactive visualization
+library(htmlwidgets) # For exporting interactive visualizations
+```
+```{r}
+# 2. Data Preparation (Simulation)
+my_data <- read_csv("../data/processed/keywords.csv")
+colnames(my_data)<-c("year","keyword","count")
+
+time_series_data<-my_data
+#keyword<-time_series_data$keywords
+```
+
+```{r}
+
+# 3. Create the Interactive Plotly Line Plot
+print("\n--- Generating Interactive Plotly Line Plot ---")
+
+plotly_line_plot <- plot_ly(
+    data = time_series_data,
+    x = ~year, 
+    y = ~count, 
+    color = ~keyword, 
+    type = 'scatter', 
+    mode = 'lines+markers', # Use lines connecting points, and show the points
+    # Customize hover information to be clear
+    hoverinfo = 'text',
+    text = ~paste(
+        'Year: ', year, 
+        '<br>Keyword: ', keyword, 
+        '<br>Count: ', round(count)
+    ),
+    line = list(width = 3),
+    marker = list(size = 8)
+) %>%
+layout(
+    title = "Keyword Popularity Over Time",
+    xaxis = list(
+        title = "Year",
+        # Ensure year tick marks are centered on the integer years
+        tickmode = "array",
+        tickvals = years
+    ),
+    yaxis = list(title = "Document Count (or Popularity)")
+)
+
+# Print the interactive plot
+print(plotly_line_plot)
+
+```
+```{r}
+# 4. Export Plotly Visualization to HTML
+print("\n--- Exporting Plotly as HTML File ---")
+
+html_output_path <- "../site/html/keyword-analysis_trends.html"
+
+# Save the interactive plot as a self-contained HTML file
+saveWidget(plotly_line_plot, file = html_output_path, selfcontained = TRUE)
+
+print(paste0("Success! Interactive line plot saved to: ", html_output_path))
+
+```
