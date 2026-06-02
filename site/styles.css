@@ -1,1 +1,33 @@
-/*  */
+/* overrrides */
+:root {
+	--space-s: 0px;
+	--width-m: 800px;
+	--width-l: 1200px;
+}
+
+body {
+	max-width: 100%;
+}
+
+h1, p {
+	max-width: var(--width-m);
+	margin-left: auto;
+	margin-right: auto;
+}
+
+summary {
+	width: 100%;
+}
+
+details {
+	max-width: var(--width-l);
+	margin-left: auto;
+	margin-right: auto;
+}
+
+iframe {
+  display: block;
+  width: calc(min(var(--width-l), 100vw) - 2 * var(--space-s));
+  height: 800px;
+  border: none;
+}
