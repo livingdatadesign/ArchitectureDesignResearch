@@ -9,10 +9,11 @@ body {
 	max-width: 100%;
 }
 
-h1, p {
+h1, p, h1, h2, h3 {
 	max-width: var(--width-m);
 	margin-left: auto;
 	margin-right: auto;
+	vertical-align: middle;
 }
 
 summary {
